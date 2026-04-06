@@ -4,7 +4,7 @@ import { Clock, CheckCircle, RefreshCw, XCircle, Loader2, Trash2, AlertTriangle 
 import { useState } from 'react';
 import { type OnChainBid } from '@/lib/useNegotiations';
 import { useToast } from './ToastProvider';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useWriteContract, useAccount } from 'wagmi';
 import { NEGOTIATION_ABI, CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { parseEther } from 'viem';
@@ -37,8 +37,11 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
   const [counterPrice, setCounterPrice] = useState('');
   const [showCounter, setShowCounter] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [mockCounters, setMockCounters] = useState<any[]>([]); // Simulation state
   const { showToast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isFocused = searchParams.get('bidId') === bid.bidId;
   const { address } = useAccount();
   const { writeContractAsync, isPending } = useWriteContract();
 
@@ -85,6 +88,18 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       showToast('Counter-bid submitted!', 'success');
       setShowCounter(false);
       onRefresh?.();
+
+      // SIMULATE AGENT RESPONSE (for prototype/demo)
+      setTimeout(() => {
+        const higherVal = (Number(counterPrice) * 1.05).toFixed(2); // Agent counters with 5% higher
+        setMockCounters(prev => [...prev, {
+          price: Number(higherVal),
+          by: bid.targetAgent,
+          at: Date.now()
+        }]);
+        showToast(`Agent countered with ${higherVal} MON!`, 'info');
+      }, 3500);
+
     } catch (err: any) {
       showToast(`Failed: ${err.shortMessage || err.message}`, 'error');
     }
@@ -209,20 +224,20 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       <div style={{ padding: '12px 16px', border: '1.5px solid var(--rv-black)', background: 'var(--rv-white)', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span className="text-label" style={{ fontSize: 10 }}>CURRENT PRICE</span>
         <span style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 20, fontWeight: 900 }}>
-          {bid.price} MON
+          {mockCounters.length > 0 ? mockCounters[mockCounters.length - 1].price : bid.price} MON
         </span>
       </div>
 
       {/* Counter history */}
-      {bid.counterHistory.length > 0 && (
+      {(bid.counterHistory.length > 0 || mockCounters.length > 0) && (
         <div style={{ position: 'relative', paddingLeft: 28, display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 16 }}>
           <div style={{ position: 'absolute', left: 7, top: 0, bottom: 0, width: '1.5px', background: 'var(--rv-gray-200)' }} />
-          {bid.counterHistory.map((event, i) => (
+          {[...bid.counterHistory, ...mockCounters].map((event, i, arr) => (
             <div key={i} style={{ position: 'relative' }}>
               <div style={{
                 position: 'absolute', left: -28, top: 4,
                 width: 14, height: 14,
-                background: i === 0 ? 'var(--rv-purple-600)' : 'var(--rv-yellow)',
+                background: i === 0 ? 'var(--rv-purple-600)' : (i === arr.length - 1 && mockCounters.length > 0 && event.by === bid.targetAgent) ? 'var(--rv-coral-600)' : 'var(--rv-yellow)',
                 border: '1.5px solid var(--rv-black)',
               }} />
               <div className="text-label" style={{ fontSize: 9, color: 'var(--rv-gray-400)', marginBottom: 2 }}>
@@ -258,16 +273,28 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       )}
 
       {/* Actions */}
-      {(bid.state === 'OPEN' || bid.state === 'COUNTERED') && (
+      {(bid.state === 'OPEN' || bid.state === 'COUNTERED' || mockCounters.length > 0) && (
         <div style={{ display: 'flex', gap: 10 }}>
           {!isInitiator && (
             <button onClick={handleAccept} disabled={isPending} className="brute-btn brute-btn-teal" style={{ flex: 2 }}>
               {isPending ? <Loader2 size={14} className="animate-spin" /> : <><CheckCircle size={14} /> ACCEPT</>}
             </button>
           )}
-          <button onClick={() => setShowCounter(!showCounter)} disabled={isPending} className="brute-btn" style={{ flex: 1 }}>
-            <RefreshCw size={14} /> COUNTER
-          </button>
+
+          {!isFocused ? (
+            <button
+              onClick={() => router.push(`/negotiate?bidId=${bid.bidId}`)}
+              className="brute-btn brute-btn-primary"
+              style={{ flex: 1 }}
+            >
+              FOCUS BID
+            </button>
+          ) : (
+            <button onClick={() => setShowCounter(!showCounter)} disabled={isPending} className="brute-btn" style={{ flex: 1 }}>
+              <RefreshCw size={14} /> COUNTER
+            </button>
+          )}
+
           {isInitiator && (
             <button onClick={handleCancel} disabled={isPending} className="brute-btn" style={{ color: 'var(--rv-coral-600)', borderColor: 'var(--rv-coral-600)' }}>
               <XCircle size={14} />
