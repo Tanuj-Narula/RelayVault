@@ -11,6 +11,8 @@ import { parseEther } from 'viem';
 import { Send, ChevronDown, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ToastProvider';
 import { useSearchParams } from 'next/navigation';
+import { useDismissedDeals } from '@/lib/useDismissedDeals';
+import { useMemo } from 'react';
 
 function NegotiateInner() {
   const searchParams = useSearchParams();
@@ -25,6 +27,20 @@ function NegotiateInner() {
   const { address, isConnected } = useAccount();
   const { agents, isLoading: loadingAgents } = useAgents();
   const { bids, isLoading: loadingBids, refetch: refetchBids } = useMyBids(address);
+  const { dismissed, dismiss } = useDismissedDeals();
+
+  // Build address → name lookup from on-chain agents
+  const agentNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    agents.forEach((a) => {
+      map[a.agentId.toLowerCase()] = a.name;
+    });
+    return map;
+  }, [agents]);
+
+  // Filter out dismissed bids from the active list
+  const visibleBids = useMemo(() => bids.filter((b) => !dismissed.has(b.bidId)), [bids, dismissed]);
+
 
   const { data: txHash, writeContract, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({ hash: txHash });
@@ -239,20 +255,25 @@ function NegotiateInner() {
                 </div>
               )}
 
-              {!loadingBids && isConnected && bids.length === 0 && (
+              {!loadingBids && isConnected && visibleBids.length === 0 && (
                 <div className="brute-card" style={{ padding: 48, textAlign: 'center', borderStyle: 'dotted' }}>
                   <div style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 13, color: 'var(--rv-gray-400)', marginBottom: 8 }}>NO ACTIVE NEGOTIATIONS</div>
                   <p style={{ fontSize: 12, color: 'var(--rv-gray-300)', margin: 0 }}>Submit a bid using the form to start negotiating.</p>
                 </div>
               )}
 
-              {bids.map((bid) => (
+              {visibleBids.map((bid) => (
                 <motion.div
                   key={bid.bidId}
                   initial={{ opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
-                  <NegotiationCard bid={bid} onRefresh={refetchBids} />
+                  <NegotiationCard
+                    bid={bid}
+                    onRefresh={refetchBids}
+                    agentNames={agentNames}
+                    onDismiss={dismiss}
+                  />
                 </motion.div>
               ))}
             </div>

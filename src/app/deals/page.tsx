@@ -1,24 +1,22 @@
 'use client';
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+import { useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { DealBoard } from '@/components/DealBoard';
-import { useMyBids } from '@/lib/useNegotiations';
+import { useMyBids, type OnChainBid } from '@/lib/useNegotiations';
+import { useAgents } from '@/lib/useAgents';
 import { useAccount } from 'wagmi';
-import { type OnChainBid } from '@/lib/useNegotiations';
-import { Loader2, AlertCircle, Handshake, RefreshCw } from 'lucide-react';
+import { useDismissedDeals } from '@/lib/useDismissedDeals';
+import { Loader2, AlertCircle, Handshake, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
 
-/* ── Demo bids for disconnected / empty state ─────────── */
+/* ── Demo bids shown when wallet not connected ────────── */
 const DEMO_BIDS: OnChainBid[] = [
   {
     bidId: '0xdemo0000000000000000000000000000000000000000000000000000000001',
     taskSpecCID: 'QmDemoAccepted',
     initiator: '0x7a3f000000000000000000001b2c',
     targetAgent: '0x9c1a000000000000000000004d5e',
-    price: 45,
-    priceRaw: BigInt(0),
-    ttlBlocks: 100,
-    state: 'ACCEPTED',
+    price: 45, priceRaw: BigInt(0), ttlBlocks: 100, state: 'ACCEPTED',
     counterHistory: [{ price: 50, by: '0x7a3f000000000000000000001b2c', at: Date.now() - 80000 }],
     createdAt: Math.floor(Date.now() / 1000) - 3600,
   },
@@ -27,10 +25,7 @@ const DEMO_BIDS: OnChainBid[] = [
     taskSpecCID: 'QmDemoCancelled',
     initiator: '0x3b8d000000000000000000007f9a',
     targetAgent: '0x5e2f000000000000000000008b3c',
-    price: 120,
-    priceRaw: BigInt(0),
-    ttlBlocks: 150,
-    state: 'CANCELLED',
+    price: 120, priceRaw: BigInt(0), ttlBlocks: 150, state: 'CANCELLED',
     counterHistory: [],
     createdAt: Math.floor(Date.now() / 1000) - 7200,
   },
@@ -39,10 +34,7 @@ const DEMO_BIDS: OnChainBid[] = [
     taskSpecCID: 'QmDemoExpired',
     initiator: '0xb1c9000000000000000000002e4f',
     targetAgent: '0xd7e3000000000000000000006a1b',
-    price: 200,
-    priceRaw: BigInt(0),
-    ttlBlocks: 50,
-    state: 'EXPIRED',
+    price: 200, priceRaw: BigInt(0), ttlBlocks: 50, state: 'EXPIRED',
     counterHistory: [
       { price: 200, by: '0xb1c9000000000000000000002e4f', at: Date.now() - 200000 },
       { price: 180, by: '0xd7e3000000000000000000006a1b', at: Date.now() - 150000 },
@@ -54,10 +46,7 @@ const DEMO_BIDS: OnChainBid[] = [
     taskSpecCID: 'QmDemoAccepted2',
     initiator: '0xf4a2000000000000000000009c7d',
     targetAgent: '0xa8b5000000000000000000003f2e',
-    price: 320,
-    priceRaw: BigInt(0),
-    ttlBlocks: 200,
-    state: 'ACCEPTED',
+    price: 320, priceRaw: BigInt(0), ttlBlocks: 200, state: 'ACCEPTED',
     counterHistory: [
       { price: 360, by: '0xf4a2000000000000000000009c7d', at: Date.now() - 500000 },
       { price: 340, by: '0xa8b5000000000000000000003f2e', at: Date.now() - 450000 },
@@ -67,19 +56,53 @@ const DEMO_BIDS: OnChainBid[] = [
   },
 ];
 
+/* Demo agent names */
+const DEMO_AGENT_NAMES: Record<string, string> = {
+  '0x7a3f000000000000000000001b2c': 'CodeGen Alpha',
+  '0x9c1a000000000000000000004d5e': 'ResearchBot Pro',
+  '0x3b8d000000000000000000007f9a': 'DataAnalyst X',
+  '0x5e2f000000000000000000008b3c': 'OracleNode Prime',
+  '0xb1c9000000000000000000002e4f': 'LegalEagle AI',
+  '0xd7e3000000000000000000006a1b': 'MediaSynth',
+  '0xf4a2000000000000000000009c7d': 'AuditHound',
+  '0xa8b5000000000000000000003f2e': 'TranslatorMesh',
+};
+
 export default function DealsPage() {
   const { address, isConnected } = useAccount();
   const { bids, isLoading, refetch } = useMyBids(address);
-  const [showDemo, setShowDemo] = useState(false);
+  const { agents } = useAgents();
+  const { dismissed, dismiss, dismissMany, clearAll } = useDismissedDeals();
 
-  /* Merge on-chain finalized/rejected with demo if opted-in */
-  const closedBids = bids.filter(
-    (b) => b.state === 'ACCEPTED' || b.state === 'CANCELLED' || b.state === 'EXPIRED'
+  /* Build address → name map from on-chain agents */
+  const agentNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    agents.forEach((a) => { map[a.agentId.toLowerCase()] = a.name; });
+    return map;
+  }, [agents]);
+
+  /* Closed on-chain bids, filtered by dismissed */
+  const closedBids = useMemo(
+    () => bids.filter(
+      (b) => (b.state === 'ACCEPTED' || b.state === 'CANCELLED' || b.state === 'EXPIRED')
+              && !dismissed.has(b.bidId)
+    ),
+    [bids, dismissed]
   );
-  const displayBids = showDemo ? DEMO_BIDS : closedBids;
+
+  /* When wallet is disconnected, show demo data (also filtered) */
+  const demoVisible = useMemo(
+    () => DEMO_BIDS.filter((b) => !dismissed.has(b.bidId)),
+    [dismissed]
+  );
+
+  const showDemo = !isConnected;
+  const displayBids = showDemo ? demoVisible : closedBids;
+  const displayNames = showDemo ? DEMO_AGENT_NAMES : agentNames;
 
   const finalizedCount = displayBids.filter((b) => b.state === 'ACCEPTED').length;
   const rejectedCount  = displayBids.filter((b) => b.state === 'CANCELLED' || b.state === 'EXPIRED').length;
+  const dismissedCount = dismissed.size;
 
   return (
     <div style={{ background: 'var(--rv-white)', minHeight: '100vh' }}>
@@ -101,81 +124,78 @@ export default function DealsPage() {
             </div>
             <h1 className="text-h1" style={{ marginBottom: 12 }}>DEAL BOARD</h1>
             <p style={{ fontSize: 15, color: 'var(--rv-gray-600)', fontFamily: 'var(--rv-font-mono)', margin: 0 }}>
-              FINALIZED &amp; REJECTED DEALS · IMMUTABLE RECORD · NEVER REMOVED
+              FINALIZED &amp; REJECTED DEALS · AGENT NAMES · REMOVABLE RECORDS
             </p>
           </div>
 
-          {/* Stats + actions */}
-          <div style={{ display: 'flex', gap: 16, alignItems: 'flex-end' }}>
-
-            {/* Summary badges */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
-              <div style={{ display: 'flex', gap: 10 }}>
-                <span className="brute-badge badge-success" style={{ fontSize: 11 }}>
-                  ✅ {finalizedCount} FINALIZED
+          {/* Right actions */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+            {/* Counts */}
+            <div style={{ display: 'flex', gap: 10 }}>
+              <span className="brute-badge badge-success" style={{ fontSize: 11 }}>
+                ✅ {finalizedCount} FINALIZED
+              </span>
+              <span className="brute-badge badge-error" style={{ fontSize: 11 }}>
+                ✕ {rejectedCount} REJECTED
+              </span>
+              {dismissedCount > 0 && (
+                <span className="brute-badge" style={{ fontSize: 11, borderColor: 'var(--rv-gray-400)', color: 'var(--rv-gray-400)' }}>
+                  🗑 {dismissedCount} HIDDEN
                 </span>
-                <span className="brute-badge badge-error" style={{ fontSize: 11 }}>
-                  ✕ {rejectedCount} REJECTED
-                </span>
-              </div>
+              )}
             </div>
 
-            {!isConnected && (
-              <button
-                onClick={() => setShowDemo(!showDemo)}
-                className="brute-btn"
-                style={{
-                  background: showDemo ? 'var(--rv-black)' : 'var(--rv-pure-white)',
-                  color: showDemo ? 'var(--rv-white)' : 'var(--rv-black)',
-                  fontSize: 12,
-                }}
-              >
-                <Handshake size={14} /> {showDemo ? 'HIDE DEMO' : 'VIEW DEMO'}
-              </button>
-            )}
-
-            {isConnected && (
-              <button onClick={() => refetch()} className="brute-btn" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <RefreshCw size={14} /> REFRESH
-              </button>
-            )}
+            {/* Action buttons */}
+            <div style={{ display: 'flex', gap: 8 }}>
+              {dismissedCount > 0 && (
+                <>
+                  <button onClick={clearAll} className="brute-btn" style={{ height: 36, fontSize: 12, gap: 6 }}>
+                    <RotateCcw size={13} /> RESTORE ALL
+                  </button>
+                  <button
+                    onClick={() => dismissMany(displayBids.map((b) => b.bidId))}
+                    className="brute-btn"
+                    style={{ height: 36, fontSize: 12, gap: 6, color: 'var(--rv-coral-600)', borderColor: 'var(--rv-coral-600)' }}
+                  >
+                    <Trash2 size={13} /> CLEAR ALL
+                  </button>
+                </>
+              )}
+              {isConnected && (
+                <button onClick={() => refetch()} className="brute-btn" style={{ height: 36, fontSize: 12, gap: 6 }}>
+                  <RefreshCw size={13} /> REFRESH
+                </button>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* ── Wallet warning ── */}
-        {!isConnected && !showDemo && (
+        {/* ── Not connected banner ── */}
+        {!isConnected && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             className="brute-card"
             style={{
-              padding: 32,
+              padding: '16px 24px',
               borderColor: 'var(--rv-purple-600)',
-              marginBottom: 40,
+              marginBottom: 32,
               display: 'flex',
               alignItems: 'center',
-              gap: 20,
+              gap: 16,
             }}
           >
-            <AlertCircle size={28} style={{ color: 'var(--rv-purple-600)', flexShrink: 0 }} />
-            <div>
-              <div className="text-label" style={{ marginBottom: 6 }}>WALLET NOT CONNECTED</div>
-              <p style={{ fontSize: 13, color: 'var(--rv-gray-400)', margin: 0, fontFamily: 'var(--rv-font-mono)' }}>
-                Connect your wallet to view your on-chain finalized and rejected deals.
-                Or click <strong>VIEW DEMO</strong> above to preview the board with sample data.
-              </p>
-            </div>
-            <button
-              onClick={() => setShowDemo(true)}
-              className="brute-btn brute-btn-purple"
-              style={{ flexShrink: 0, marginLeft: 'auto' }}
-            >
-              <Handshake size={14} /> VIEW DEMO
-            </button>
+            <AlertCircle size={20} style={{ color: 'var(--rv-purple-600)', flexShrink: 0 }} />
+            <p style={{ fontSize: 13, color: 'var(--rv-gray-500)', margin: 0, fontFamily: 'var(--rv-font-mono)' }}>
+              WALLET NOT CONNECTED — Showing demo data. Connect your wallet to view real on-chain deals.
+            </p>
+            <span className="brute-badge badge-warning" style={{ flexShrink: 0, fontSize: 10 }}>
+              DEMO MODE
+            </span>
           </motion.div>
         )}
 
-        {/* ── Loading state ── */}
+        {/* ── Loading ── */}
         {isConnected && isLoading && (
           <div className="brute-card" style={{ padding: 64, textAlign: 'center', borderStyle: 'dotted' }}>
             <Loader2 size={32} style={{ margin: '0 auto 16px', color: 'var(--rv-gray-300)' }} className="animate-spin" />
@@ -185,37 +205,41 @@ export default function DealsPage() {
           </div>
         )}
 
-        {/* ── No deals yet (connected but empty) ── */}
-        {isConnected && !isLoading && closedBids.length === 0 && (
-          <div style={{ marginBottom: 40 }}>
-            <div className="brute-card" style={{ padding: 48, textAlign: 'center', borderStyle: 'dashed', marginBottom: 24 }}>
+        {/* ── Empty (all dismissed or no deals) ── */}
+        {!isLoading && displayBids.length === 0 && (
+          <AnimatePresence>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="brute-card"
+              style={{ padding: 48, textAlign: 'center', borderStyle: 'dashed', marginBottom: 24 }}
+            >
               <Handshake size={36} style={{ margin: '0 auto 16px', color: 'var(--rv-gray-300)' }} />
               <div style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 13, color: 'var(--rv-gray-400)', marginBottom: 8 }}>
-                NO CLOSED DEALS ON-CHAIN YET
+                {dismissedCount > 0 ? 'ALL DEALS HIDDEN' : 'NO CLOSED DEALS YET'}
               </div>
               <p style={{ fontSize: 12, color: 'var(--rv-gray-300)', margin: '0 0 20px' }}>
-                Finalized and rejected bids will appear here once you negotiate on-chain.
+                {dismissedCount > 0
+                  ? `You have hidden ${dismissedCount} deal${dismissedCount > 1 ? 's' : ''}. Click Restore All to bring them back.`
+                  : 'Finalized and rejected bids will appear here once you negotiate on-chain.'}
               </p>
-              <button
-                onClick={() => setShowDemo(true)}
-                className="brute-btn"
-              >
-                <Handshake size={14} /> PREVIEW WITH DEMO DATA
-              </button>
-            </div>
-          </div>
+              {dismissedCount > 0 && (
+                <button onClick={clearAll} className="brute-btn" style={{ margin: '0 auto' }}>
+                  <RotateCcw size={14} /> RESTORE ALL ({dismissedCount})
+                </button>
+              )}
+            </motion.div>
+          </AnimatePresence>
         )}
 
         {/* ── Deal Board ── */}
-        {(!isLoading && displayBids.length > 0) && (
-          <>
-            {showDemo && (
-              <div className="brute-badge badge-warning" style={{ display: 'inline-flex', marginBottom: 20, fontSize: 11, height: 'auto', padding: '6px 12px' }}>
-                ⚠ DEMO DATA — Connect wallet to view your real on-chain deals
-              </div>
-            )}
-            <DealBoard bids={displayBids} />
-          </>
+        {!isLoading && displayBids.length > 0 && (
+          <DealBoard
+            bids={displayBids}
+            agentNames={displayNames}
+            onDismiss={dismiss}
+            onDismissMany={dismissMany}
+          />
         )}
 
       </main>

@@ -1,6 +1,6 @@
 'use client';
 import { motion } from 'framer-motion';
-import { Clock, CheckCircle, RefreshCw, XCircle, Loader2 } from 'lucide-react';
+import { Clock, CheckCircle, RefreshCw, XCircle, Loader2, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { type OnChainBid } from '@/lib/useNegotiations';
 import { useToast } from './ToastProvider';
@@ -12,6 +12,10 @@ import { parseEther } from 'viem';
 interface NegotiationCardProps {
   bid: OnChainBid;
   onRefresh?: () => void;
+  /** address → display name (e.g. "CodeGen Alpha") */
+  agentNames?: Record<string, string>;
+  /** Remove this bid from the current view */
+  onDismiss?: (bidId: string) => void;
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -30,7 +34,7 @@ const STATE_TEXT_COLORS: Record<string, string> = {
   CANCELLED: 'var(--rv-white)',
 };
 
-export function NegotiationCard({ bid, onRefresh }: NegotiationCardProps) {
+export function NegotiationCard({ bid, onRefresh, agentNames, onDismiss }: NegotiationCardProps) {
   const [counterPrice, setCounterPrice] = useState('');
   const [showCounter, setShowCounter] = useState(false);
   const { showToast } = useToast();
@@ -39,9 +43,17 @@ export function NegotiationCard({ bid, onRefresh }: NegotiationCardProps) {
   const { writeContractAsync, isPending } = useWriteContract();
 
   const shortId = `${bid.bidId.slice(0, 10)}...${bid.bidId.slice(-6)}`;
-  const shortInitiator = `${bid.initiator.slice(0, 6)}...${bid.initiator.slice(-4)}`;
-  const shortTarget = `${bid.targetAgent.slice(0, 6)}...${bid.targetAgent.slice(-4)}`;
+
+  // Resolve display names from agentNames map, fallback to short address
+  const resolveName = (addr: string) => {
+    const key = addr.toLowerCase();
+    return agentNames?.[key] ?? `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+  };
+  const initiatorDisplay = resolveName(bid.initiator);
+  const targetDisplay = resolveName(bid.targetAgent);
+
   const isInitiator = address?.toLowerCase() === bid.initiator.toLowerCase();
+  const isClosed = bid.state === 'ACCEPTED' || bid.state === 'CANCELLED' || bid.state === 'EXPIRED';
 
   const handleAccept = async () => {
     try {
@@ -100,7 +112,7 @@ export function NegotiationCard({ bid, onRefresh }: NegotiationCardProps) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
           <div className="text-h3" style={{ fontWeight: 700, fontSize: 14 }}>
-            {shortInitiator} <span style={{ color: 'var(--rv-gray-300)' }}>→</span> {shortTarget}
+            {initiatorDisplay} <span style={{ color: 'var(--rv-gray-300)' }}>→</span> {targetDisplay}
           </div>
           <div style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 10, color: 'var(--rv-gray-400)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontWeight: 700, color: 'var(--rv-black)' }}>{shortId}</span>
@@ -115,18 +127,43 @@ export function NegotiationCard({ bid, onRefresh }: NegotiationCardProps) {
             </div>
           )}
         </div>
-        <span
-          className="brute-badge"
-          style={{
-            background: STATE_COLORS[bid.state],
-            color: STATE_TEXT_COLORS[bid.state],
-            borderColor: 'var(--rv-black)',
-            fontWeight: 800,
-            fontSize: 10,
-          }}
-        >
-          {bid.state}
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span
+            className="brute-badge"
+            style={{
+              background: STATE_COLORS[bid.state],
+              color: STATE_TEXT_COLORS[bid.state],
+              borderColor: 'var(--rv-black)',
+              fontWeight: 800,
+              fontSize: 10,
+            }}
+          >
+            {bid.state}
+          </span>
+          {/* Dismiss button for closed bids */}
+          {isClosed && onDismiss && (
+            <button
+              onClick={() => onDismiss(bid.bidId)}
+              title="Remove from view"
+              style={{
+                width: 24, height: 24, display: 'flex', alignItems: 'center',
+                justifyContent: 'center', background: 'var(--rv-pure-white)',
+                border: '1px solid var(--rv-gray-100)', cursor: 'pointer',
+                color: 'var(--rv-gray-400)',
+              }}
+              onMouseEnter={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--rv-coral-600)';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--rv-coral-600)';
+              }}
+              onMouseLeave={(e) => {
+                (e.currentTarget as HTMLButtonElement).style.color = 'var(--rv-gray-400)';
+                (e.currentTarget as HTMLButtonElement).style.borderColor = 'var(--rv-gray-100)';
+              }}
+            >
+              <Trash2 size={12} />
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Current price */}
@@ -150,7 +187,7 @@ export function NegotiationCard({ bid, onRefresh }: NegotiationCardProps) {
                 border: '1.5px solid var(--rv-black)',
               }} />
               <div className="text-label" style={{ fontSize: 9, color: 'var(--rv-gray-400)', marginBottom: 2 }}>
-                BY_{event.by.slice(0, 6)}...{event.by.slice(-4)}
+                BY_{resolveName(event.by)}
               </div>
               <div style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 16, fontWeight: 800 }}>
                 {event.price} MON
