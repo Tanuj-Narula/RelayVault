@@ -1,6 +1,6 @@
 'use client';
 import { motion } from 'framer-motion';
-import { Clock, CheckCircle, RefreshCw, XCircle, Loader2, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle, RefreshCw, XCircle, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { type OnChainBid } from '@/lib/useNegotiations';
 import { useToast } from './ToastProvider';
@@ -12,10 +12,9 @@ import { parseEther } from 'viem';
 interface NegotiationCardProps {
   bid: OnChainBid;
   onRefresh?: () => void;
-  /** address → display name (e.g. "CodeGen Alpha") */
   agentNames?: Record<string, string>;
-  /** Remove this bid from the current view */
-  onDismiss?: (bidId: string) => void;
+  /** Permanently delete this bid from the view */
+  onDelete?: (bidId: string) => void;
 }
 
 const STATE_COLORS: Record<string, string> = {
@@ -34,9 +33,10 @@ const STATE_TEXT_COLORS: Record<string, string> = {
   CANCELLED: 'var(--rv-white)',
 };
 
-export function NegotiationCard({ bid, onRefresh, agentNames, onDismiss }: NegotiationCardProps) {
+export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: NegotiationCardProps) {
   const [counterPrice, setCounterPrice] = useState('');
   const [showCounter, setShowCounter] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const { showToast } = useToast();
   const router = useRouter();
   const { address } = useAccount();
@@ -107,7 +107,45 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDismiss }: Negot
   };
 
   return (
-    <div className="brute-card" style={{ padding: 24, background: 'var(--rv-pure-white)' }}>
+    <>
+      {/* Confirm delete modal */}
+      {confirmDelete && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9999,
+          background: 'rgba(13,13,13,0.65)', backdropFilter: 'blur(2px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+        }}>
+          <div style={{
+            background: 'var(--rv-pure-white)',
+            border: '2px solid var(--rv-coral-600)',
+            boxShadow: '6px 6px 0px var(--rv-coral-900)',
+            padding: '32px 36px', maxWidth: 420, width: '90%',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+              <AlertTriangle size={22} style={{ color: 'var(--rv-coral-600)' }} />
+              <div className="text-label" style={{ color: 'var(--rv-coral-600)' }}>PERMANENT DELETE</div>
+            </div>
+            <p style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 13, marginBottom: 6 }}>
+              Delete bid {bid.bidId.slice(0, 10)}...?
+            </p>
+            <p style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 11, color: 'var(--rv-coral-600)', marginBottom: 24 }}>
+              ⚠ This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button
+                onClick={() => { setConfirmDelete(false); onDelete?.(bid.bidId); }}
+                className="brute-btn"
+                style={{ flex: 1, background: 'var(--rv-coral-600)', color: '#fff', borderColor: 'var(--rv-coral-600)' }}
+              >
+                <Trash2 size={14} /> YES, DELETE
+              </button>
+              <button onClick={() => setConfirmDelete(false)} className="brute-btn" style={{ flex: 1 }}>CANCEL</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="brute-card" style={{ padding: 24, background: 'var(--rv-pure-white)' }}>
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 }}>
         <div>
@@ -141,10 +179,10 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDismiss }: Negot
             {bid.state}
           </span>
           {/* Dismiss button for closed bids */}
-          {isClosed && onDismiss && (
+          {isClosed && onDelete && (
             <button
-              onClick={() => onDismiss(bid.bidId)}
-              title="Remove from view"
+              onClick={() => setConfirmDelete(true)}
+              title="Permanently delete this deal"
               style={{
                 width: 24, height: 24, display: 'flex', alignItems: 'center',
                 justifyContent: 'center', background: 'var(--rv-pure-white)',
@@ -244,6 +282,7 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDismiss }: Negot
           </span>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

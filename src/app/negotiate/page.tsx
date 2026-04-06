@@ -11,7 +11,7 @@ import { parseEther } from 'viem';
 import { Send, ChevronDown, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ToastProvider';
 import { useSearchParams } from 'next/navigation';
-import { useDismissedDeals } from '@/lib/useDismissedDeals';
+import { useDeletedDeals } from '@/lib/useDismissedDeals';
 import { useMemo } from 'react';
 
 function NegotiateInner() {
@@ -27,19 +27,17 @@ function NegotiateInner() {
   const { address, isConnected } = useAccount();
   const { agents, isLoading: loadingAgents } = useAgents();
   const { bids, isLoading: loadingBids, refetch: refetchBids } = useMyBids(address);
-  const { dismissed, dismiss } = useDismissedDeals();
+  const { deleted, deleteDeal } = useDeletedDeals();
 
   // Build address → name lookup from on-chain agents
   const agentNames = useMemo(() => {
     const map: Record<string, string> = {};
-    agents.forEach((a) => {
-      map[a.agentId.toLowerCase()] = a.name;
-    });
+    agents.forEach((a) => { map[a.agentId.toLowerCase()] = a.name; });
     return map;
   }, [agents]);
 
-  // Filter out dismissed bids from the active list
-  const visibleBids = useMemo(() => bids.filter((b) => !dismissed.has(b.bidId)), [bids, dismissed]);
+  // Filter out deleted bids
+  const visibleBids = useMemo(() => bids.filter((b) => !deleted.has(b.bidId)), [bids, deleted]);
 
 
   const { data: txHash, writeContract, isPending } = useWriteContract();
@@ -272,7 +270,7 @@ function NegotiateInner() {
                     bid={bid}
                     onRefresh={refetchBids}
                     agentNames={agentNames}
-                    onDismiss={dismiss}
+                    onDelete={deleteDeal}
                   />
                 </motion.div>
               ))}

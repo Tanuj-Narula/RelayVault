@@ -6,10 +6,10 @@ import { DealBoard } from '@/components/DealBoard';
 import { useMyBids, type OnChainBid } from '@/lib/useNegotiations';
 import { useAgents } from '@/lib/useAgents';
 import { useAccount } from 'wagmi';
-import { useDismissedDeals } from '@/lib/useDismissedDeals';
-import { Loader2, AlertCircle, Handshake, RefreshCw, RotateCcw, Trash2 } from 'lucide-react';
+import { useDeletedDeals } from '@/lib/useDismissedDeals';
+import { Loader2, AlertCircle, Handshake, RefreshCw } from 'lucide-react';
 
-/* ── Demo bids shown when wallet not connected ────────── */
+/* ── Demo bids ───────────────────────────────────────── */
 const DEMO_BIDS: OnChainBid[] = [
   {
     bidId: '0xdemo0000000000000000000000000000000000000000000000000000000001',
@@ -56,7 +56,6 @@ const DEMO_BIDS: OnChainBid[] = [
   },
 ];
 
-/* Demo agent names */
 const DEMO_AGENT_NAMES: Record<string, string> = {
   '0x7a3f000000000000000000001b2c': 'CodeGen Alpha',
   '0x9c1a000000000000000000004d5e': 'ResearchBot Pro',
@@ -72,37 +71,36 @@ export default function DealsPage() {
   const { address, isConnected } = useAccount();
   const { bids, isLoading, refetch } = useMyBids(address);
   const { agents } = useAgents();
-  const { dismissed, dismiss, dismissMany, clearAll } = useDismissedDeals();
+  const { deleted, deleteDeal, deleteMany } = useDeletedDeals();
 
-  /* Build address → name map from on-chain agents */
+  /* Build address → name map */
   const agentNames = useMemo(() => {
     const map: Record<string, string> = {};
     agents.forEach((a) => { map[a.agentId.toLowerCase()] = a.name; });
     return map;
   }, [agents]);
 
-  /* Closed on-chain bids, filtered by dismissed */
+  /* Closed on-chain bids, filtered by permanently deleted */
   const closedBids = useMemo(
     () => bids.filter(
-      (b) => (b.state === 'ACCEPTED' || b.state === 'CANCELLED' || b.state === 'EXPIRED')
-              && !dismissed.has(b.bidId)
+      (b) =>
+        (b.state === 'ACCEPTED' || b.state === 'CANCELLED' || b.state === 'EXPIRED') &&
+        !deleted.has(b.bidId)
     ),
-    [bids, dismissed]
+    [bids, deleted]
   );
 
-  /* When wallet is disconnected, show demo data (also filtered) */
   const demoVisible = useMemo(
-    () => DEMO_BIDS.filter((b) => !dismissed.has(b.bidId)),
-    [dismissed]
+    () => DEMO_BIDS.filter((b) => !deleted.has(b.bidId)),
+    [deleted]
   );
 
-  const showDemo = !isConnected;
-  const displayBids = showDemo ? demoVisible : closedBids;
+  const showDemo  = !isConnected;
+  const displayBids  = showDemo ? demoVisible  : closedBids;
   const displayNames = showDemo ? DEMO_AGENT_NAMES : agentNames;
 
   const finalizedCount = displayBids.filter((b) => b.state === 'ACCEPTED').length;
   const rejectedCount  = displayBids.filter((b) => b.state === 'CANCELLED' || b.state === 'EXPIRED').length;
-  const dismissedCount = dismissed.size;
 
   return (
     <div style={{ background: 'var(--rv-white)', minHeight: '100vh' }}>
@@ -111,26 +109,20 @@ export default function DealsPage() {
 
         {/* ── Page Header ── */}
         <div style={{
-          marginBottom: 48,
-          borderBottom: '1.5px solid var(--rv-black)',
-          paddingBottom: 24,
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'flex-end',
+          marginBottom: 48, borderBottom: '1.5px solid var(--rv-black)',
+          paddingBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
         }}>
           <div>
             <div className="text-label" style={{ color: 'var(--rv-purple-600)', marginBottom: 8 }}>
-              // DEAL_BOARD.PERSISTENT_RECORD
+              // DEAL_BOARD.PERMANENT_RECORD
             </div>
             <h1 className="text-h1" style={{ marginBottom: 12 }}>DEAL BOARD</h1>
             <p style={{ fontSize: 15, color: 'var(--rv-gray-600)', fontFamily: 'var(--rv-font-mono)', margin: 0 }}>
-              FINALIZED &amp; REJECTED DEALS · AGENT NAMES · REMOVABLE RECORDS
+              FINALIZED &amp; REJECTED DEALS · AGENT NAMES · PERMANENT DELETE
             </p>
           </div>
 
-          {/* Right actions */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
-            {/* Counts */}
             <div style={{ display: 'flex', gap: 10 }}>
               <span className="brute-badge badge-success" style={{ fontSize: 11 }}>
                 ✅ {finalizedCount} FINALIZED
@@ -138,60 +130,27 @@ export default function DealsPage() {
               <span className="brute-badge badge-error" style={{ fontSize: 11 }}>
                 ✕ {rejectedCount} REJECTED
               </span>
-              {dismissedCount > 0 && (
-                <span className="brute-badge" style={{ fontSize: 11, borderColor: 'var(--rv-gray-400)', color: 'var(--rv-gray-400)' }}>
-                  🗑 {dismissedCount} HIDDEN
-                </span>
-              )}
             </div>
-
-            {/* Action buttons */}
-            <div style={{ display: 'flex', gap: 8 }}>
-              {dismissedCount > 0 && (
-                <>
-                  <button onClick={clearAll} className="brute-btn" style={{ height: 36, fontSize: 12, gap: 6 }}>
-                    <RotateCcw size={13} /> RESTORE ALL
-                  </button>
-                  <button
-                    onClick={() => dismissMany(displayBids.map((b) => b.bidId))}
-                    className="brute-btn"
-                    style={{ height: 36, fontSize: 12, gap: 6, color: 'var(--rv-coral-600)', borderColor: 'var(--rv-coral-600)' }}
-                  >
-                    <Trash2 size={13} /> CLEAR ALL
-                  </button>
-                </>
-              )}
-              {isConnected && (
-                <button onClick={() => refetch()} className="brute-btn" style={{ height: 36, fontSize: 12, gap: 6 }}>
-                  <RefreshCw size={13} /> REFRESH
-                </button>
-              )}
-            </div>
+            {isConnected && (
+              <button onClick={() => refetch()} className="brute-btn" style={{ height: 36, fontSize: 12, gap: 6 }}>
+                <RefreshCw size={13} /> REFRESH
+              </button>
+            )}
           </div>
         </div>
 
-        {/* ── Not connected banner ── */}
+        {/* ── Wallet not connected ── */}
         {!isConnected && (
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
             className="brute-card"
-            style={{
-              padding: '16px 24px',
-              borderColor: 'var(--rv-purple-600)',
-              marginBottom: 32,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 16,
-            }}
+            style={{ padding: '16px 24px', borderColor: 'var(--rv-purple-600)', marginBottom: 32, display: 'flex', alignItems: 'center', gap: 16 }}
           >
             <AlertCircle size={20} style={{ color: 'var(--rv-purple-600)', flexShrink: 0 }} />
             <p style={{ fontSize: 13, color: 'var(--rv-gray-500)', margin: 0, fontFamily: 'var(--rv-font-mono)' }}>
               WALLET NOT CONNECTED — Showing demo data. Connect your wallet to view real on-chain deals.
             </p>
-            <span className="brute-badge badge-warning" style={{ flexShrink: 0, fontSize: 10 }}>
-              DEMO MODE
-            </span>
+            <span className="brute-badge badge-warning" style={{ flexShrink: 0, fontSize: 10 }}>DEMO MODE</span>
           </motion.div>
         )}
 
@@ -205,29 +164,23 @@ export default function DealsPage() {
           </div>
         )}
 
-        {/* ── Empty (all dismissed or no deals) ── */}
+        {/* ── All deleted / no deals ── */}
         {!isLoading && displayBids.length === 0 && (
           <AnimatePresence>
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
               className="brute-card"
-              style={{ padding: 48, textAlign: 'center', borderStyle: 'dashed', marginBottom: 24 }}
+              style={{ padding: 48, textAlign: 'center', borderStyle: 'dashed' }}
             >
               <Handshake size={36} style={{ margin: '0 auto 16px', color: 'var(--rv-gray-300)' }} />
               <div style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 13, color: 'var(--rv-gray-400)', marginBottom: 8 }}>
-                {dismissedCount > 0 ? 'ALL DEALS HIDDEN' : 'NO CLOSED DEALS YET'}
+                NO DEALS TO DISPLAY
               </div>
-              <p style={{ fontSize: 12, color: 'var(--rv-gray-300)', margin: '0 0 20px' }}>
-                {dismissedCount > 0
-                  ? `You have hidden ${dismissedCount} deal${dismissedCount > 1 ? 's' : ''}. Click Restore All to bring them back.`
-                  : 'Finalized and rejected bids will appear here once you negotiate on-chain.'}
+              <p style={{ fontSize: 12, color: 'var(--rv-gray-300)', margin: 0 }}>
+                {isConnected
+                  ? 'Finalized and rejected bids will appear here once you negotiate on-chain.'
+                  : 'All demo deals have been deleted. Connect your wallet to see real deals.'}
               </p>
-              {dismissedCount > 0 && (
-                <button onClick={clearAll} className="brute-btn" style={{ margin: '0 auto' }}>
-                  <RotateCcw size={14} /> RESTORE ALL ({dismissedCount})
-                </button>
-              )}
             </motion.div>
           </AnimatePresence>
         )}
@@ -237,8 +190,8 @@ export default function DealsPage() {
           <DealBoard
             bids={displayBids}
             agentNames={displayNames}
-            onDismiss={dismiss}
-            onDismissMany={dismissMany}
+            onDelete={deleteDeal}
+            onDeleteMany={deleteMany}
           />
         )}
 

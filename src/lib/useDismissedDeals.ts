@@ -1,16 +1,19 @@
 'use client';
 import { useState, useEffect } from 'react';
 
-const STORAGE_KEY = 'rv_dismissed_deals';
+const STORAGE_KEY = 'rv_deleted_deals';
 
-export function useDismissedDeals() {
-  const [dismissed, setDismissed] = useState<Set<string>>(new Set());
+/**
+ * Permanently deleted deal IDs stored in localStorage.
+ * There is NO restore — once deleted, it's gone from the app.
+ */
+export function useDeletedDeals() {
+  const [deleted, setDeleted] = useState<Set<string>>(new Set());
 
-  // Hydrate from localStorage on mount
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) setDismissed(new Set(JSON.parse(stored) as string[]));
+      if (stored) setDeleted(new Set(JSON.parse(stored) as string[]));
     } catch {}
   }, []);
 
@@ -20,8 +23,9 @@ export function useDismissedDeals() {
     } catch {}
   };
 
-  const dismiss = (bidId: string) => {
-    setDismissed((prev) => {
+  /** Permanently delete a single deal */
+  const deleteDeal = (bidId: string) => {
+    setDeleted((prev) => {
       const next = new Set(prev);
       next.add(bidId);
       save(next);
@@ -29,8 +33,9 @@ export function useDismissedDeals() {
     });
   };
 
-  const dismissMany = (bidIds: string[]) => {
-    setDismissed((prev) => {
+  /** Permanently delete multiple deals at once */
+  const deleteMany = (bidIds: string[]) => {
+    setDeleted((prev) => {
       const next = new Set(prev);
       bidIds.forEach((id) => next.add(id));
       save(next);
@@ -38,19 +43,5 @@ export function useDismissedDeals() {
     });
   };
 
-  const restore = (bidId: string) => {
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.delete(bidId);
-      save(next);
-      return next;
-    });
-  };
-
-  const clearAll = () => {
-    setDismissed(new Set());
-    try { localStorage.removeItem(STORAGE_KEY); } catch {}
-  };
-
-  return { dismissed, dismiss, dismissMany, restore, clearAll };
+  return { deleted, deleteDeal, deleteMany };
 }
