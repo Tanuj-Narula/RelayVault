@@ -66,7 +66,7 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       });
       showToast('Bid accepted! Escrow locked on Monad.', 'success');
       onRefresh?.();
-      setTimeout(() => router.push('/history'), 1500);
+      setTimeout(() => router.push('/deals'), 2000);
     } catch (err: any) {
       showToast(`Failed: ${err.shortMessage || err.message}`, 'error');
     }
@@ -101,6 +101,7 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       });
       showToast('Bid cancelled.', 'success');
       onRefresh?.();
+      setTimeout(() => router.push('/deals'), 2000);
     } catch (err: any) {
       showToast(`Failed: ${err.shortMessage || err.message}`, 'error');
     }
