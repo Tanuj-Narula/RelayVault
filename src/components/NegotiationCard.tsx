@@ -68,7 +68,28 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
 
   const handleAccept = async () => {
     try {
-      showToast(`Accepting bid on-chain...`, 'info');
+      showToast(`Accepting bid...`, 'info');
+
+      // If we used the local mock negotiation flow
+      if (mockCounters.length > 0) {
+        const mockAcceptedStr = localStorage.getItem('rv_mock_deals');
+        const mockAccepted = mockAcceptedStr ? JSON.parse(mockAcceptedStr) : [];
+        const finalPrice = mockCounters[mockCounters.length - 1].price;
+        
+        mockAccepted.push({
+          ...bid,
+          state: 'ACCEPTED',
+          price: String(finalPrice)
+        });
+        localStorage.setItem('rv_mock_deals', JSON.stringify(mockAccepted));
+        
+        onRefresh?.();
+        onDelete?.(bid.bidId); // Remove from active board immediately
+        showToast('Bid accepted locally for demo flow!', 'success');
+        setTimeout(() => router.push('/deals'), 1500);
+        return;
+      }
+
       await writeContractAsync({
         address: CONTRACT_ADDRESSES.NEGOTIATION,
         abi: NEGOTIATION_ABI,
@@ -79,7 +100,7 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       onRefresh?.();
       setTimeout(() => router.push('/deals'), 2000);
     } catch (err: any) {
-      showToast(`Failed: ${err.shortMessage || err.message}`, 'error');
+      showToast(`Failed: ${err.message}`, 'error');
     }
   };
 

@@ -16,8 +16,8 @@ const DEMO_BIDS: OnChainBid[] = [
     taskSpecCID: 'QmDemoAccepted',
     initiator: '0x7a3f000000000000000000001b2c',
     targetAgent: '0x9c1a000000000000000000004d5e',
-    price: 45, priceRaw: BigInt(0), ttlBlocks: 100, state: 'ACCEPTED',
-    counterHistory: [{ price: 50, by: '0x7a3f000000000000000000001b2c', at: Date.now() - 80000 }],
+    price: '45', priceRaw: BigInt(0), ttlBlocks: 100, state: 'ACCEPTED',
+    counterHistory: [{ price: '50', by: '0x7a3f000000000000000000001b2c', at: Date.now() - 80000 }],
     createdAt: Math.floor(Date.now() / 1000) - 3600,
   },
   {
@@ -25,7 +25,7 @@ const DEMO_BIDS: OnChainBid[] = [
     taskSpecCID: 'QmDemoCancelled',
     initiator: '0x3b8d000000000000000000007f9a',
     targetAgent: '0x5e2f000000000000000000008b3c',
-    price: 120, priceRaw: BigInt(0), ttlBlocks: 150, state: 'CANCELLED',
+    price: '120', priceRaw: BigInt(0), ttlBlocks: 150, state: 'CANCELLED',
     counterHistory: [],
     createdAt: Math.floor(Date.now() / 1000) - 7200,
   },
@@ -34,10 +34,10 @@ const DEMO_BIDS: OnChainBid[] = [
     taskSpecCID: 'QmDemoExpired',
     initiator: '0xb1c9000000000000000000002e4f',
     targetAgent: '0xd7e3000000000000000000006a1b',
-    price: 200, priceRaw: BigInt(0), ttlBlocks: 50, state: 'EXPIRED',
+    price: '200', priceRaw: BigInt(0), ttlBlocks: 50, state: 'EXPIRED',
     counterHistory: [
-      { price: 200, by: '0xb1c9000000000000000000002e4f', at: Date.now() - 200000 },
-      { price: 180, by: '0xd7e3000000000000000000006a1b', at: Date.now() - 150000 },
+      { price: '200', by: '0xb1c9000000000000000000002e4f', at: Date.now() - 200000 },
+      { price: '180', by: '0xd7e3000000000000000000006a1b', at: Date.now() - 150000 },
     ],
     createdAt: Math.floor(Date.now() / 1000) - 14400,
   },
@@ -46,11 +46,11 @@ const DEMO_BIDS: OnChainBid[] = [
     taskSpecCID: 'QmDemoAccepted2',
     initiator: '0xf4a2000000000000000000009c7d',
     targetAgent: '0xa8b5000000000000000000003f2e',
-    price: 320, priceRaw: BigInt(0), ttlBlocks: 200, state: 'ACCEPTED',
+    price: '320', priceRaw: BigInt(0), ttlBlocks: 200, state: 'ACCEPTED',
     counterHistory: [
-      { price: 360, by: '0xf4a2000000000000000000009c7d', at: Date.now() - 500000 },
-      { price: 340, by: '0xa8b5000000000000000000003f2e', at: Date.now() - 450000 },
-      { price: 320, by: '0xf4a2000000000000000000009c7d', at: Date.now() - 400000 },
+      { price: '360', by: '0xf4a2000000000000000000009c7d', at: Date.now() - 500000 },
+      { price: '340', by: '0xa8b5000000000000000000003f2e', at: Date.now() - 450000 },
+      { price: '320', by: '0xf4a2000000000000000000009c7d', at: Date.now() - 400000 },
     ],
     createdAt: Math.floor(Date.now() / 1000) - 86400,
   },
@@ -73,6 +73,17 @@ export default function DealsPage() {
   const { agents } = useAgents();
   const { deleted, deleteDeal, deleteMany } = useDeletedDeals();
 
+  /* Load any locally mocked deals (for dummy negotiation flow off-chain) */
+  const mockAccepted = useMemo(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem('rv_mock_deals');
+        return stored ? JSON.parse(stored) as OnChainBid[] : [];
+      }
+    } catch {}
+    return [];
+  }, []);
+
   /* Build address → name map */
   const agentNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -82,12 +93,12 @@ export default function DealsPage() {
 
   /* Closed on-chain bids, filtered by permanently deleted */
   const closedBids = useMemo(
-    () => bids.filter(
+    () => [...bids, ...mockAccepted].filter(
       (b) =>
         (b.state === 'ACCEPTED' || b.state === 'CANCELLED' || b.state === 'EXPIRED') &&
         !deleted.has(b.bidId)
     ),
-    [bids, deleted]
+    [bids, mockAccepted, deleted]
   );
 
   const demoVisible = useMemo(
