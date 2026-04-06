@@ -8,17 +8,15 @@ import { useMyBids } from '@/lib/useNegotiations';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { NEGOTIATION_ABI, CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { parseEther } from 'viem';
-import { Send, ChevronDown, RefreshCw, Loader2, AlertCircle, ArrowLeft } from 'lucide-react';
+import { Send, ChevronDown, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 import { useToast } from '@/components/ToastProvider';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useDeletedDeals } from '@/lib/useDismissedDeals';
 import { useMemo } from 'react';
 
 function NegotiateInner() {
   const searchParams = useSearchParams();
   const prefilledAgent = searchParams.get('agentId') ?? '';
-  const selectedBidId = searchParams.get('bidId');
-  const router = useRouter();
 
   const [price, setPrice] = useState('');
   const [targetAgent, setTargetAgent] = useState(prefilledAgent);
@@ -38,12 +36,14 @@ function NegotiateInner() {
     return map;
   }, [agents]);
 
-  // Filter out deleted bids, and if a specific bidId is selected, show only that one.
+  // Filter out deleted bids, and ONLY show bids for the currently selected agent
   const visibleBids = useMemo(() => {
-    const active = bids.filter((b) => !deleted.has(b.bidId));
-    if (selectedBidId) return active.filter((b) => b.bidId === selectedBidId);
+    let active = bids.filter((b) => !deleted.has(b.bidId));
+    if (targetAgent) {
+      active = active.filter((b) => b.targetAgent.toLowerCase() === targetAgent.toLowerCase());
+    }
     return active;
-  }, [bids, deleted, selectedBidId]);
+  }, [bids, deleted, targetAgent]);
 
 
   const { data: txHash, writeContract, isPending } = useWriteContract();
@@ -122,38 +122,10 @@ function NegotiateInner() {
           </div>
         )}
 
-        {selectedBidId ? (
-          <div style={{ maxWidth: 640, margin: '0 auto' }}>
-            <button
-              onClick={() => router.push('/negotiate')}
-              className="brute-btn"
-              style={{ marginBottom: 24, display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}
-            >
-              <ArrowLeft size={16} /> BACK TO ALL BIDS
-            </button>
-            
-            {visibleBids.length === 0 ? (
-              <div className="brute-card" style={{ padding: 48, textAlign: 'center', borderStyle: 'dashed' }}>
-                <div style={{ fontFamily: 'var(--rv-font-mono)', fontSize: 13, color: 'var(--rv-gray-400)' }}>BID NOT FOUND OR DELETED</div>
-              </div>
-            ) : (
-              visibleBids.map((bid) => (
-                <motion.div key={bid.bidId} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}>
-                  <NegotiationCard
-                    bid={bid}
-                    onRefresh={refetchBids}
-                    agentNames={agentNames}
-                    onDelete={deleteDeal}
-                  />
-                </motion.div>
-              ))
-            )}
-          </div>
-        ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 48 }}>
 
-            {/* Submit Bid Form */}
-            <div>
+          {/* Submit Bid Form */}
+          <div>
             <div className="text-label" style={{ marginBottom: 16 }}>// SUBMIT NEW BID</div>
             <div className="brute-card" style={{ padding: 32, display: 'flex', flexDirection: 'column', gap: 24 }}>
 
@@ -311,7 +283,6 @@ function NegotiateInner() {
             </div>
           </div>
         </div>
-        )}
 
       </main>
     </div>

@@ -4,7 +4,7 @@ import { Clock, CheckCircle, RefreshCw, XCircle, Loader2, Trash2, AlertTriangle 
 import { useState } from 'react';
 import { type OnChainBid } from '@/lib/useNegotiations';
 import { useToast } from './ToastProvider';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useWriteContract, useAccount } from 'wagmi';
 import { NEGOTIATION_ABI, CONTRACT_ADDRESSES } from '@/lib/contracts';
 import { parseEther } from 'viem';
@@ -40,10 +40,19 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
   const [mockCounters, setMockCounters] = useState<any[]>([]); // Simulation state
   const { showToast } = useToast();
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const isFocused = searchParams.get('bidId') === bid.bidId;
   const { address } = useAccount();
   const { writeContractAsync, isPending } = useWriteContract();
+
+  const isInitiator = bid.initiator.toLowerCase() === address?.toLowerCase();
+  
+  // To allow accepting incoming counters:
+  const lastEventBy = mockCounters.length > 0 
+    ? mockCounters[mockCounters.length - 1].by
+    : bid.counterHistory.length > 0
+      ? bid.counterHistory[bid.counterHistory.length - 1].by
+      : bid.initiator;
+  
+  const canAccept = lastEventBy.toLowerCase() !== address?.toLowerCase();
 
   const shortId = `${bid.bidId.slice(0, 10)}...${bid.bidId.slice(-6)}`;
 
@@ -55,7 +64,6 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
   const initiatorDisplay = resolveName(bid.initiator);
   const targetDisplay = resolveName(bid.targetAgent);
 
-  const isInitiator = address?.toLowerCase() === bid.initiator.toLowerCase();
   const isClosed = bid.state === 'ACCEPTED' || bid.state === 'CANCELLED' || bid.state === 'EXPIRED';
 
   const handleAccept = async () => {
@@ -78,16 +86,14 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
   const handleCounter = async () => {
     if (!counterPrice) return;
     try {
-      showToast(`Sending counter-bid...`, 'info');
-      await writeContractAsync({
-        address: CONTRACT_ADDRESSES.NEGOTIATION,
-        abi: NEGOTIATION_ABI,
-        functionName: 'counterBid',
-        args: [bid.bidId as `0x${string}`, parseEther(counterPrice)],
-      });
-      showToast('Counter-bid submitted!', 'success');
+      showToast(`Sending counter-bid locally...`, 'info');
+      // Mock user counter
+      setMockCounters(prev => [...prev, {
+        price: Number(counterPrice),
+        by: address || bid.initiator,
+        at: Date.now()
+      }]);
       setShowCounter(false);
-      onRefresh?.();
 
       // SIMULATE AGENT RESPONSE (for prototype/demo)
       setTimeout(() => {
@@ -101,22 +107,14 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       }, 3500);
 
     } catch (err: any) {
-      showToast(`Failed: ${err.shortMessage || err.message}`, 'error');
+      showToast(`Failed: ${err.message}`, 'error');
     }
   };
 
   const handleCancel = async () => {
     try {
-      showToast(`Cancelling bid...`, 'info');
-      await writeContractAsync({
-        address: CONTRACT_ADDRESSES.NEGOTIATION,
-        abi: NEGOTIATION_ABI,
-        functionName: 'cancelBid',
-        args: [bid.bidId as `0x${string}`],
-      });
-      showToast('Bid cancelled.', 'success');
-      onRefresh?.();
-      setTimeout(() => router.push('/deals'), 2000);
+      showToast(`Offer rejected and removed.`, 'success');
+      onDelete?.(bid.bidId); // Locally dismiss without gas fee
     } catch (err: any) {
       showToast(`Failed: ${err.shortMessage || err.message}`, 'error');
     }
@@ -275,31 +273,19 @@ export function NegotiationCard({ bid, onRefresh, agentNames, onDelete }: Negoti
       {/* Actions */}
       {(bid.state === 'OPEN' || bid.state === 'COUNTERED' || mockCounters.length > 0) && (
         <div style={{ display: 'flex', gap: 10 }}>
-          {!isInitiator && (
+          {canAccept && (
             <button onClick={handleAccept} disabled={isPending} className="brute-btn brute-btn-teal" style={{ flex: 2 }}>
               {isPending ? <Loader2 size={14} className="animate-spin" /> : <><CheckCircle size={14} /> ACCEPT</>}
             </button>
           )}
 
-          {!isFocused ? (
-            <button
-              onClick={() => router.push(`/negotiate?bidId=${bid.bidId}`)}
-              className="brute-btn brute-btn-primary"
-              style={{ flex: 1 }}
-            >
-              FOCUS BID
-            </button>
-          ) : (
-            <button onClick={() => setShowCounter(!showCounter)} disabled={isPending} className="brute-btn" style={{ flex: 1 }}>
-              <RefreshCw size={14} /> COUNTER
-            </button>
-          )}
+          <button onClick={() => setShowCounter(!showCounter)} disabled={isPending} className="brute-btn" style={{ flex: 1 }}>
+            <RefreshCw size={14} /> COUNTER
+          </button>
 
-          {isInitiator && (
-            <button onClick={handleCancel} disabled={isPending} className="brute-btn" style={{ color: 'var(--rv-coral-600)', borderColor: 'var(--rv-coral-600)' }}>
-              <XCircle size={14} />
-            </button>
-          )}
+          <button onClick={handleCancel} disabled={isPending} className="brute-btn" style={{ color: 'var(--rv-coral-600)', borderColor: 'var(--rv-coral-600)' }}>
+            <XCircle size={14} />
+          </button>
         </div>
       )}
 
