@@ -3,6 +3,7 @@ import { useState, useEffect, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import Navbar from '@/components/Navbar';
 import { NegotiationCard } from '@/components/NegotiationCard';
+import { DealBoard } from '@/components/DealBoard';
 import { useAgents } from '@/lib/useAgents';
 import { useMyBids } from '@/lib/useNegotiations';
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
@@ -258,6 +259,10 @@ function NegotiateInner() {
             </div>
           </div>
         </div>
+
+        {/* Deal Board – persists finalized & rejected deals */}
+        <DealBoard bids={bids} />
+
       </main>
     </div>
   );
