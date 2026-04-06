@@ -3,12 +3,13 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { motion } from 'framer-motion';
-import { Activity, BarChart3, BookOpen, Home, Search, Settings, Wallet } from 'lucide-react';
+import { Activity, BarChart3, BookOpen, Handshake, Home, Search, Settings, Wallet } from 'lucide-react';
 
 const navLinks = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/discover', label: 'Discover', icon: Search },
   { href: '/negotiate', label: 'Negotiate', icon: Activity },
+  { href: '/deals', label: 'Deals', icon: Handshake },
   { href: '/vault', label: 'Vault', icon: Wallet },
   { href: '/dashboard', label: 'Dashboard', icon: BarChart3 },
   { href: '/history', label: 'History', icon: BookOpen },
