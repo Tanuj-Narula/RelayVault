@@ -252,7 +252,17 @@ export default function HomePage() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 24 }}>
             {AGENTS.slice(0, 3).map(agent => (
-              <AgentCard key={agent.agentId} agent={agent} />
+              <AgentCard 
+                key={agent.agentId} 
+                agent={{
+                  ...agent,
+                  status: agent.status.toLowerCase() as any,
+                  pricingModel: {
+                    ...agent.pricingModel,
+                    pricingType: (agent.pricingModel.pricingType as string) === 'FIXED' ? 0 : 1,
+                  }
+                } as any} 
+              />
             ))}
           </div>
         </div>
